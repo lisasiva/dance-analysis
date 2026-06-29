@@ -1,0 +1,16 @@
+[project]
+name = "dance-analysis"
+version = "0.1.0"
+description = "Pose + audio pipeline for hip-hop self-vs-team comparison"
+requires-python = ">=3.11"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+data/raw/*
+data/processed/*
+data/reports/*
+data/history.csv
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/reports/.gitkeep
+*.pt
+.DS_Store

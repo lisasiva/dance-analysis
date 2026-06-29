@@ -1,0 +1,14 @@
+# Core pipeline
+ultralytics>=8.3.0      # YOLO11-pose + ByteTrack multi-person tracking
+librosa>=0.10.2         # beat / onset detection
+numpy>=1.26
+scipy>=1.11
+opencv-python>=4.9
+matplotlib>=3.8
+
+# Ingest
+gdown>=5.2.0            # Google Drive downloads
+yt-dlp>=2024.1.0        # YouTube downloads
+
+# Local UI (for non-technical users)
+streamlit>=1.30

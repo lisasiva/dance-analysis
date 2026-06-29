@@ -1,0 +1,7 @@
+# Hide Streamlit's developer menu (Rerun, "Run on save"/auto-rerun, Deploy, etc.)
+# so non-technical users see a clean app.
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
