@@ -1,12 +1,20 @@
 # dance-analysis
 
-A pose + audio pipeline for comparing your **street-style** dancing against a target team,
-quantifying the gaps that actually matter between you and a team reference.
+A pose + audio pipeline for comparing your performance against that of another dancer you admire,
+quantifying the gaps that actually matter
 
-## What it measures
+## Quick start
 
-Street-style auditions reward a mix of qualities, and different teams weight them
-differently. This pipeline scores each and ranks them per the target team:
+Needs Python 3 installed.
+
+```
+git clone <this repo>
+cd dance-analysis
+./setup.sh      # installs everything (and ffmpeg) — first run takes a few minutes
+./run.sh        # opens the app in your browser at http://localhost:8501/
+```
+
+## What dance-analysis measures
 
 - **Pocket** — when you *initiate* movement relative to the beat (after = patient/in the pocket, before = rushing).
 - **Timing** — accent placement vs. the reference, and how consistent.
@@ -34,51 +42,6 @@ ingest  ->  pose      ->  beats     ->  compare        ->  report
             tracking)
 ```
 
-## Quick start (no command line)
-
-For non-technical users. Needs Python 3 installed.
-
-```
-git clone <this repo>
-cd dance-analysis
-./setup.sh      # installs everything (and ffmpeg) — first run takes a few minutes
-./run.sh        # opens the app in your browser
-```
-
-Then in the browser: paste a Google Drive or YouTube link, enter the film date, song title,
-and instructor, describe yourself + the reference dancer, pick the target team, and click
-through the two buttons. The app shows a labeled image of all detected dancers so you can
-pick which one is you.
-
-## Setup (command line)
-
-Requires Python 3.11–3.12 recommended (3.13 works but torch wheels are newer), and **ffmpeg**.
-
-```
-brew install ffmpeg
-cd ~/Desktop/dance-analysis
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
-
-## Usage
-
-```
-# 1. Pull a clip. The id is built as <date>-<title>-<instructor> and printed back.
-python -m dance_analysis ingest --drive "<drive-or-youtube-url>" \
-    --date 2026-06-15 --title "Pony" --instructor "Dalia"
-#    -> id: 2026-06-15-pony-dalia   (use this id for the next steps)
-
-# 2. Pose + beats + a labeled preview, in one step
-python -m dance_analysis prep 2026-06-15-pony-dalia
-#    Open the preview to see which track is you and which is the reference.
-
-# 3. Compare two tracks in the same clip (you vs. reference)
-python -m dance_analysis compare 2026-06-15-pony-dalia --me 1 --ref 2 --team project-a
-
-# -> writes data/reports/2026-06-15-pony-dalia/  (report.md, metrics.json/csv, plots)
-```
 
 ## Layout
 
@@ -98,7 +61,7 @@ data/processed/  pose + beat artifacts
 data/reports/    output per clip
 ```
 
-## Status
+## Future Improvements
 
-First runnable slice: ingest + pose + beats + same-clip compare + report.
-DTW two-clip path is wired in `align.py` and exposed but less battle-tested.
+* Show summary in sidebar of key metrics to focus on now, based on most recent reports
+* Generate a training plan to improve key metrics
