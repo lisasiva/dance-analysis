@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from . import config
+from . import config, store
 from .align import mirror_track, window_track
 from .audio import BeatGrid, extract_beats
 from .ingest import ingest
@@ -117,6 +117,12 @@ def cmd_compare(a):
     print(f"journal -> {out_dir / 'journal_entry.md'}  (paste into your Notion log)")
 
 
+def cmd_export(a):
+    out, n = store.export_all()
+    print(f"exported {n} clips -> {out}")
+    print("one row per clip; you_/ref_/diff_ per metric; sorted by film date.")
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="dance_analysis",
                                 description="Hip-hop self-vs-team movement analysis.")
@@ -161,6 +167,9 @@ def main(argv=None):
                     help="text file of feedback notes, one per line "
                          "(name only = looked up in data/processed/)")
     pc.set_defaults(func=cmd_compare)
+
+    pe = sub.add_parser("export", help="export all clips' metrics to one CSV (progress)")
+    pe.set_defaults(func=cmd_export)
 
     args = p.parse_args(argv)
     args.func(args)

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from dance_analysis import config
+from dance_analysis import config, store
 from dance_analysis.audio import BeatGrid, extract_beats
 from dance_analysis.ingest import ingest
 from dance_analysis.metrics import (groove_timing, moments, picture_catching,
@@ -194,6 +194,14 @@ with tab_past:
     dirs = _report_dirs()
     if not dirs:
         st.caption("No analyses yet — run one in the Analyze tab.")
+    else:
+        out, n = store.export_all()
+        st.download_button(f"⬇ Export ALL {n} clips (CSV — track progress)",
+                           out.read_bytes(), "all_metrics.csv", "text/csv",
+                           help="One row per clip, every metric as you/ref/diff, "
+                                "sorted by film date. Filter to a song to see the "
+                                "diff shrink over time.")
+        st.divider()
     for d in dirs:
         with st.expander(_report_label(d)):   # collapsed by default → compact list
             plot = d / "motion_energy.png"

@@ -215,7 +215,7 @@ def build_report(name: str, me: dict, ref: dict, sync: dict,
     # raw metrics
     (out_dir / "metrics.json").write_text(json.dumps(
         {"name": name, "team": team, "me": me, "reference": ref, "sync": sync,
-         "gaps": gaps, "weighted": weighted, "ranked": ranked},
+         "pair": pair, "gaps": gaps, "weighted": weighted, "ranked": ranked},
         indent=2, default=float,
     ))
     # Notion-paste-friendly one-block summary
