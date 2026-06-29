@@ -82,8 +82,12 @@ def _compare_table(me: dict, ref: dict) -> list[str]:
         ("dynamic range", f"{me['dynamic_range']:.2f}", f"{ref['dynamic_range']:.2f}",
          _verdict(me["dynamic_range"], ref["dynamic_range"])),
         ("groove (locked bounce)", f"{g:.3f}", f"{gr:.3f}", _verdict(g, gr, 0.25)),
-        ("articulation (head+chest)", f"{me['articulation']:.2f}",
-         f"{ref['articulation']:.2f}", _verdict(me["articulation"], ref["articulation"])),
+        ("hip articulation (sway/twerk)", f"{me.get('hip_articulation', 0):.3f}",
+         f"{ref.get('hip_articulation', 0):.3f}",
+         _verdict(me.get("hip_articulation", 0), ref.get("hip_articulation", 0), 0.20)),
+        ("core share (vs limbs)", f"{me.get('core_share', 0):.2f}",
+         f"{ref.get('core_share', 0):.2f}",
+         _verdict(me.get("core_share", 0), ref.get("core_share", 0))),
         ("body engagement (parts/move, of 5)", f"{me['engagement']:.1f}",
          f"{ref['engagement']:.1f}", _verdict(me["engagement"], ref["engagement"])),
     ]
@@ -98,6 +102,18 @@ def _compare_table(me: dict, ref: dict) -> list[str]:
         out.append(f"| {name_} | {mv} | {rv} | {v} |")
     out.append("\n*Differences inside ~12% read as matched (within measurement noise). "
                "A difference is only trustworthy if it repeats across several reference clips.*")
+
+    # where the movement comes from: share of motion per body part (you vs ref)
+    ms, rs = me.get("segment_motion", {}), ref.get("segment_motion", {})
+    if ms and rs:
+        out.append("\n### Where your movement comes from\n")
+        out.append("Share of total motion by body part. Limb-dominant (arms/legs) vs. "
+                   "core-dominant (head/chest/hips) is the tell — dancing from the center "
+                   "reads as more advanced.\n")
+        out.append("| Body part | You | Ref |")
+        out.append("|---|---|---|")
+        for k in ("head", "chest", "hips", "arms", "legs"):
+            out.append(f"| {k} | {ms.get(k, 0) * 100:.0f}% | {rs.get(k, 0) * 100:.0f}% |")
     return out
 
 
@@ -107,7 +123,9 @@ _KEY_METRICS = [
     ("fluidity (gooey)", lambda m: m["fluidity"]),
     ("dynamic range", lambda m: m["dynamic_range"]),
     ("groove (locked bounce)", lambda m: m["groove_strength"] * m["groove_beat_lock"]),
-    ("articulation (head+chest)", lambda m: m["articulation"]),
+    # NOTE: hip_articulation is shown in the table but NOT classified as a
+    # strength/weakness — "more sway" isn't better (it can be sloppy weight-shift).
+    ("core share (vs limbs)", lambda m: m.get("core_share", 0)),
     ("body engagement (parts/move)", lambda m: m["engagement"]),
     ("ROM head", lambda m: m.get("rom_region", {}).get("head", 0)),
     ("ROM shoulders", lambda m: m.get("rom_region", {}).get("shoulders", 0)),
@@ -176,11 +194,16 @@ def _journal_entry(name: str, meta: dict, team: str | None, me: dict, ref: dict,
 def build_report(name: str, me: dict, ref: dict, sync: dict,
                  plots: list[Path], team: str | None = None,
                  feedback: list[str] | None = None,
-                 meta: dict | None = None, moments: dict | None = None) -> Path:
+                 meta: dict | None = None, moments: dict | None = None,
+                 pair: dict | None = None) -> Path:
     meta = meta or {}
     moments = moments or {}
+    pair = pair or {}
     strengths, weaknesses = _classify(me, ref)
     gaps = _gap_scores(me, ref, sync, team)
+    # picture-catching: reference-anchored, so its gap comes from the pair metrics
+    pc = pair.get("picture_catching")
+    gaps["picture"] = min(1.0, max(0.0, 1.0 - pc["corr"])) if pc else 0.0
     weights = config.weights_for(team)
     weighted = {k: gaps[k] * weights[k] for k in gaps}
     # Sync is deprioritized: matching a reference's exact shape rewards conformity
@@ -225,6 +248,7 @@ def build_report(name: str, me: dict, ref: dict, sync: dict,
         "dynamics": "contrast between big moves and stillness",
         "groove": "bounce / weight-shift locked to the beat",
         "engagement": "engaging multiple body parts per move",
+        "picture": "catching & holding the shapes the reference holds",
         "sync": "matching the reference's shape (low priority — style is yours)",
         "rom": "range of motion / line & extension",
     }
@@ -235,6 +259,32 @@ def build_report(name: str, me: dict, ref: dict, sync: dict,
         lines.append(f"| {i} | {k} | {gaps[k]:.2f} | {note} |")
 
     lines.extend(_compare_table(me, ref))
+
+    pc = pair.get("picture_catching")
+    if pc:
+        lines.append("\n## Picture-catching (do you hit & hold her shapes?)\n")
+        lines.append(f"- During the reference's holds (her pictures), **you move "
+                     f"{pc['ratio']:.1f}× faster than her** — lower is better (1× = you "
+                     "freeze exactly when she does).")
+        lines.append(f"- **Stillpoint match: {pc['corr']:.2f}** (1 = you catch every "
+                     "picture, 0 = no relationship). This is the strongest signal of "
+                     "*committing to the shapes* vs. dancing through them.")
+
+    gt = pair.get("groove_timing")
+    if gt and gt["corr"] >= 0.4:
+        lag = gt["lag_ms"]
+        when = ("late — behind her" if lag > 15 else
+                "early — ahead of her" if lag < -15 else "right with her")
+        lines.append("\n## Groove timing (early or late)\n")
+        lines.append(f"- Your bounce is **~{abs(lag):.0f} ms {when}** (match strength "
+                     f"{gt['corr']:.2f}; reference-anchored, so reliable).")
+        if lag > 15:
+            lines.append("- Drive the down a touch sooner to sit with her.")
+        elif lag < -15:
+            lines.append("- Wait/sit back a touch — you're rushing the down.")
+    elif gt:
+        lines.append("\n## Groove timing\n- Your bounce doesn't track hers closely enough "
+                     f"to time reliably (match {gt['corr']:.2f}).")
 
     if moments:
         lines.append("\n## Moments to study (timestamps in this clip)\n")

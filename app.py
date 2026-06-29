@@ -13,7 +13,8 @@ import streamlit as st
 from dance_analysis import config
 from dance_analysis.audio import BeatGrid, extract_beats
 from dance_analysis.ingest import ingest
-from dance_analysis.metrics import moments, profile_track, sync_between
+from dance_analysis.metrics import (groove_timing, moments, picture_catching,
+                                    profile_track, sync_between)
 from dance_analysis.pose import PoseSequence, extract_pose
 from dance_analysis.report import build_report
 from dance_analysis.visualize import plot_comparison, save_track_preview
@@ -47,9 +48,13 @@ DEFINITIONS = {
 
 
 def _report_dirs():
-    return sorted([d for d in config.REPORTS.iterdir()
-                   if d.is_dir() and (d / "report.md").exists()],
-                  key=lambda d: (d / "report.md").stat().st_mtime, reverse=True)
+    dirs = [d for d in config.REPORTS.iterdir()
+            if d.is_dir() and (d / "report.md").exists()]
+    # newest film date first; fall back to file mtime when a date is missing
+    def _key(d):
+        m = config.load_meta(d.name)
+        return (m.get("video_date") or "", (d / "report.md").stat().st_mtime)
+    return sorted(dirs, key=_key, reverse=True)
 
 
 def _report_label(d) -> str:
@@ -170,8 +175,12 @@ with tab_analyze:
                 gfp = config.general_feedback_path()
                 if gfp.exists():
                     fb += [ln.strip() for ln in gfp.read_text().splitlines() if ln.strip()]
+                pair = {"picture_catching": picture_catching(seq.tracks[me_id],
+                                                             seq.tracks[ref_id], seq.fps),
+                        "groove_timing": groove_timing(seq.tracks[me_id],
+                                                       seq.tracks[ref_id], seq.fps)}
                 report = build_report(name, me, ref, sync, [plot], team=team, feedback=fb,
-                                      meta=config.load_meta(name), moments=mom)
+                                      meta=config.load_meta(name), moments=mom, pair=pair)
             st.success("Done! Also saved under the Past reports tab.")
             st.image(str(out / "motion_energy.png"))
             st.markdown(Path(report).read_text())

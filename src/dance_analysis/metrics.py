@@ -266,6 +266,55 @@ def body_engagement(track: Track) -> float:
     return float(np.mean(active[:, moving].sum(axis=0)))
 
 
+def hip_articulation(track: Track, fps: float) -> float:
+    """Lateral hip movement relative to the torso (sway / twerk / weight-shift).
+
+    The main metrics pelvis-center every frame, which mathematically ERASES this
+    motion. Here we measure the hips moving *under a stable torso* (hip-mid minus
+    shoulder-mid, scale-normalized), on non-turn frames. Higher = more hip work.
+    """
+    kps = track.kps.astype(float)
+    if len(kps) < 5:
+        return 0.0
+    still = ~_turning_mask(kps, fps)
+    tl = torso_length(kps)
+    shm = _mid(kps, "left_shoulder", "right_shoulder")
+    hm = _mid(kps, "left_hip", "right_hip")
+    sway = (hm[:, 0] - shm[:, 0]) / tl
+    s = sway[still]
+    s = s[np.isfinite(s)]
+    return float(np.std(s)) if s.size >= 4 else 0.0
+
+
+def _centroid_segment_motion(track: Track) -> dict:
+    """Per-segment motion measured relative to the WHOLE-BODY centroid (not the
+    pelvis), so hip motion isn't zeroed out. Comparable units across segments."""
+    kps = track.kps[:, :, :2].astype(float)
+    centroid = np.nanmean(kps, axis=1, keepdims=True)
+    tl = torso_length(track.kps.astype(float))[:, None, None]
+    pos = (kps - centroid) / tl
+    disp = np.linalg.norm(np.diff(pos, axis=0), axis=2)        # (N-1, 17)
+    out = {}
+    for name, joints in config.SEGMENTS.items():
+        idx = [config.KP[j] for j in joints]
+        out[name] = float(np.nan_to_num(np.nanmean(disp[:, idx])))
+    return out
+
+
+def movement_distribution(track: Track) -> dict:
+    """Where the movement lives: share of motion per segment, plus the fraction
+    coming from the CORE (head + chest + hips) vs. the limbs (arms + legs).
+
+    Low core_share = limb-dominant ('marking with feet/arms'); high = dancing
+    from the center, which is what reads as advanced in commercial/street styles.
+    """
+    seg = _centroid_segment_motion(track)
+    total = sum(seg.values()) + 1e-9
+    shares = {k: v / total for k, v in seg.items()}
+    core = shares["head"] + shares["chest"] + shares["hips"]
+    return {"share": shares, "core_share": float(core)}
+
+
 def groove(track: Track, fps: float, grid: BeatGrid) -> dict:
     """Bounce / weight-shift: vertical oscillation of the body and how well it
     locks to the beat. Project A 'find the weight shifts / grooves'.
@@ -284,18 +333,96 @@ def groove(track: Track, fps: float, grid: BeatGrid) -> dict:
     yr = np.interp(ug, t[good], yn[good])
     yr = yr - np.polyval(np.polyfit(np.arange(len(yr)), yr, 1), np.arange(len(yr)))
     strength = float(np.std(yr))
-    # dominant oscillation frequency vs. beat frequency (and its half/double)
-    spec = np.abs(np.fft.rfft(yr * np.hanning(len(yr))))
+    # beat_lock = fraction of the bounce's POWER that sits at the beat frequency
+    # (and its half/double). Earlier this used the single dominant frequency, which
+    # slow vertical drift (level changes/posture) always hijacks — so it read ~0 for
+    # everyone. Band-power is what actually answers "do you bounce on the tempo".
+    power = np.abs(np.fft.rfft(yr * np.hanning(len(yr)))) ** 2
     freqs = np.fft.rfftfreq(len(yr), d=1.0 / fps)
-    if len(spec) > 1:
-        f_dom = freqs[1 + int(np.argmax(spec[1:]))]
-    else:
-        f_dom = 0.0
     beat_hz = grid.tempo / 60.0
-    targets = np.array([beat_hz * 0.5, beat_hz, beat_hz * 2.0])
-    rel = np.min(np.abs(targets - f_dom) / (targets + 1e-9))
-    beat_lock = float(max(0.0, 1.0 - rel))
+
+    def _band(f0):
+        return power[(freqs > 0.8 * f0) & (freqs < 1.2 * f0)].sum()
+
+    non_drift = power[freqs > 0.3].sum() + 1e-9   # ignore slow drift in the total
+    beat_power = _band(beat_hz) + _band(0.5 * beat_hz) + _band(2.0 * beat_hz)
+    beat_lock = float(min(1.0, beat_power / non_drift))
     return {"strength": strength, "beat_lock": beat_lock}
+
+
+def picture_catching(me: Track, ref: Track, fps: float) -> dict | None:
+    """Do you hit and HOLD the shapes the reference holds?
+
+    The reference's stillpoints (low-velocity frames) are the 'pictures' the
+    choreography calls for. We check how still YOU are at those same frames.
+    Moving fast during her holds = you're blowing through the pictures.
+    """
+    tm, sm = speed_series(me, fps)
+    tr, sr = speed_series(ref, fps)
+    if tm.size < 10 or tr.size < 10:
+        return None
+    fm = {int(round(t * fps)): s for t, s in zip(tm, sm)}
+    fr = {int(round(t * fps)): s for t, s in zip(tr, sr)}
+    common = sorted(set(fm) & set(fr))
+    if len(common) < 20:
+        return None
+    msp = np.array([fm[f] for f in common])
+    rsp = np.array([fr[f] for f in common])
+    hold = rsp <= np.percentile(rsp, 20)
+    if hold.sum() < 3:
+        return None
+    ref_hold = float(rsp[hold].mean())
+    you_hold = float(msp[hold].mean())
+    return {
+        "ratio": you_hold / (ref_hold + 1e-9),      # you move Nx faster during her holds
+        "corr": float(np.corrcoef(msp, rsp)[0, 1]),  # stillpoint match (1=perfect, 0=none)
+        "n_holds": int(hold.sum()),
+    }
+
+
+def groove_timing(me: Track, ref: Track, fps: float) -> dict | None:
+    """Is your bounce EARLY or LATE vs. the reference?
+
+    Cross-correlates the two vertical hip-bounce signals and reports the lag.
+    Reference-anchored (same clip), so it cancels the beat-detector's offset and
+    is the reliable way to say 'you hit the down a hair before/after her'.
+    Negative = you lead (early); positive = you trail (late).
+    """
+    def vbounce(track):
+        kps = track.kps.astype(float)
+        tl = torso_length(kps)
+        y = (kps[:, config.KP["left_hip"], 1] + kps[:, config.KP["right_hip"], 1]) / 2 / tl
+        return track.frames / fps, y
+
+    tm, ym = vbounce(me)
+    tr, yr = vbounce(ref)
+    lo, hi = max(tm.min(), tr.min()), min(tm.max(), tr.max())
+    n = int((hi - lo) * fps)
+    if n < int(fps):
+        return None
+    g = np.linspace(lo, hi, n)
+    idx = np.arange(n)
+    a = np.interp(g, tm, ym)
+    b = np.interp(g, tr, yr)
+    a = a - np.polyval(np.polyfit(idx, a, 2), idx)   # detrend slow drift
+    b = b - np.polyval(np.polyfit(idx, b, 2), idx)
+    a = (a - a.mean()) / (a.std() + 1e-9)
+    b = (b - b.mean()) / (b.std() + 1e-9)
+    maxlag = int(0.5 * fps)
+    best, best_c = 0, -2.0
+    for lag in range(-maxlag, maxlag + 1):
+        if lag < 0:
+            x, z = a[:lag], b[-lag:]
+        elif lag > 0:
+            x, z = a[lag:], b[:-lag]
+        else:
+            x, z = a, b
+        if len(x) < 5:
+            continue
+        c = float(np.dot(x, z) / len(x))
+        if c > best_c:
+            best_c, best = c, lag
+    return {"lag_ms": best / fps * 1000.0, "corr": float(np.clip(best_c, -1, 1))}
 
 
 def sync_between(me: Track, ref: Track, fps: float) -> dict:
@@ -473,6 +600,7 @@ def profile_track(track: Track, fps: float, grid: BeatGrid) -> dict:
     seg = segment_energy(track, fps)
     grv = groove(track, fps, grid)
     pkt = pocket(track, fps, grid)
+    dist = movement_distribution(track)
     return {
         "n_frames": int(len(track.frames)),
         "seconds": float(len(track.frames) / fps),
@@ -484,6 +612,9 @@ def profile_track(track: Track, fps: float, grid: BeatGrid) -> dict:
         "articulation": seg["articulation"],
         "segment_share": seg["share"],
         "engagement": body_engagement(track),
+        "hip_articulation": hip_articulation(track, fps),
+        "core_share": dist["core_share"],
+        "segment_motion": dist["share"],
         "n_accents": int(events.size),
         "timing_bias_ms": timing["bias_ms"],
         "timing_std_ms": timing["std_ms"],

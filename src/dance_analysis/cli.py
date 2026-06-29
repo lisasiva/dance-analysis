@@ -10,7 +10,8 @@ from . import config
 from .align import mirror_track, window_track
 from .audio import BeatGrid, extract_beats
 from .ingest import ingest
-from .metrics import moments, profile_track, sync_between
+from .metrics import (groove_timing, moments, picture_catching, profile_track,
+                      sync_between)
 from .pose import PoseSequence, extract_pose
 from .report import build_report
 from .visualize import plot_comparison, save_track_preview
@@ -107,8 +108,10 @@ def cmd_compare(a):
     out_dir = config.report_dir(a.name)
     plot = plot_comparison(me_t, ref_t, seq.fps, grid, out_dir / "motion_energy.png")
     mom = moments(me_t, ref_t, seq.fps)
+    pair = {"picture_catching": picture_catching(me_t, ref_t, seq.fps),
+            "groove_timing": groove_timing(me_t, ref_t, seq.fps)}
     report = build_report(a.name, me, ref, sync, [plot], team=a.team,
-                          feedback=feedback, meta=meta, moments=mom)
+                          feedback=feedback, meta=meta, moments=mom, pair=pair)
     print(f"report  -> {report}")
     print(f"csv     -> {out_dir / 'metrics.csv'}")
     print(f"journal -> {out_dir / 'journal_entry.md'}  (paste into your Notion log)")
