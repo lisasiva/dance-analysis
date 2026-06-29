@@ -52,6 +52,11 @@ def _gap_scores(me: dict, ref: dict, sync: dict, team: str | None) -> dict:
     }
 
 
+def _fmt_pct(pct: float) -> str:
+    """Cap runaway percentages (when the reference value is ~0) for readable output."""
+    return ">300" if pct > 300 else f"{pct:.0f}"
+
+
 def _verdict(me_v: float, ref_v: float, deadband: float = 0.12) -> str:
     """Compare a value to the reference. The reference IS the target, so within
     the deadband = matched (success); outside = a real difference to look at."""
@@ -60,8 +65,8 @@ def _verdict(me_v: float, ref_v: float, deadband: float = 0.12) -> str:
     rel = (me_v - ref_v) / abs(ref_v)
     pct, dirn = abs(rel) * 100, "below" if rel < 0 else "above"
     if abs(rel) <= deadband:
-        return f"✓ matched ({pct:.0f}% {dirn})" if pct >= 1 else "✓ matched"
-    return f"{'▼' if rel < 0 else '▲'} {pct:.0f}% {dirn}"
+        return f"✓ matched ({_fmt_pct(pct)}% {dirn})" if pct >= 1 else "✓ matched"
+    return f"{'▼' if rel < 0 else '▲'} {_fmt_pct(pct)}% {dirn}"
 
 
 def _compare_table(me: dict, ref: dict) -> list[str]:
@@ -123,9 +128,9 @@ def _classify(me: dict, ref: dict, band: float = 0.12):
             continue
         rel = (mv - rv) / abs(rv)
         if rel > band:
-            strengths.append((rel, f"{label}: {rel * 100:.0f}% above reference"))
+            strengths.append((rel, f"{label}: {_fmt_pct(rel * 100)}% above reference"))
         elif rel < -band:
-            weaknesses.append((-rel, f"{label}: {abs(rel) * 100:.0f}% below reference"))
+            weaknesses.append((-rel, f"{label}: {_fmt_pct(abs(rel) * 100)}% below reference"))
     strengths.sort(reverse=True)
     weaknesses.sort(reverse=True)
     return [s for _, s in strengths], [w for _, w in weaknesses]
