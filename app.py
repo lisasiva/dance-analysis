@@ -11,6 +11,7 @@ from pathlib import Path
 import streamlit as st
 
 from dance_analysis import config, store
+from dance_analysis.align import window_track
 from dance_analysis.audio import BeatGrid, extract_beats
 from dance_analysis.ingest import ingest
 from dance_analysis.metrics import (groove_timing, moments, picture_catching,
@@ -152,6 +153,12 @@ with tab_analyze:
         c1, c2 = st.columns(2)
         me_sel = c1.selectbox("Which track is YOU?", opts, index=0)
         ref_sel = c2.selectbox("Which is the REFERENCE?", opts, index=min(1, len(opts) - 1))
+        t1, t2 = st.columns(2)
+        start_s = t1.text_input("Dance starts at (seconds, optional)",
+                                help="Skip the intro freestyle/shuffle so it doesn't "
+                                     "count. Leave blank to use the whole clip.")
+        end_s = t2.text_input("Dance ends at (seconds, optional)",
+                              help="Skip the outro. Leave blank for the whole clip.")
 
         if st.button("Compare"):
             me_id, ref_id = ids[opts.index(me_sel)], ids[opts.index(ref_sel)]
@@ -162,23 +169,27 @@ with tab_analyze:
             seq = PoseSequence.load(config.pose_path(name))
             grid = BeatGrid.load(config.beats_path(name))
             team = None if state["team"] == "(generic)" else state["team"]
+            start = float(start_s) if start_s.strip() else None
+            end = float(end_s) if end_s.strip() else None
+            me_t, ref_t = seq.tracks[me_id], seq.tracks[ref_id]
+            if start is not None or end is not None:
+                me_t = window_track(me_t, seq.fps, start, end)
+                ref_t = window_track(ref_t, seq.fps, start, end)
             with st.spinner("Comparing…"):
-                me = profile_track(seq.tracks[me_id], seq.fps, grid)
-                ref = profile_track(seq.tracks[ref_id], seq.fps, grid)
-                sync = sync_between(seq.tracks[me_id], seq.tracks[ref_id], seq.fps)
+                me = profile_track(me_t, seq.fps, grid)
+                ref = profile_track(ref_t, seq.fps, grid)
+                sync = sync_between(me_t, ref_t, seq.fps)
                 out = config.report_dir(name)
-                plot = plot_comparison(seq.tracks[me_id], seq.tracks[ref_id], seq.fps,
-                                       grid, out / "motion_energy.png")
-                mom = moments(seq.tracks[me_id], seq.tracks[ref_id], seq.fps)
+                plot = plot_comparison(me_t, ref_t, seq.fps, grid,
+                                       out / "motion_energy.png")
+                mom = moments(me_t, ref_t, seq.fps)
                 fb = [ln.strip() for ln in state.get("feedback", "").splitlines()
                       if ln.strip()]
                 gfp = config.general_feedback_path()
                 if gfp.exists():
                     fb += [ln.strip() for ln in gfp.read_text().splitlines() if ln.strip()]
-                pair = {"picture_catching": picture_catching(seq.tracks[me_id],
-                                                             seq.tracks[ref_id], seq.fps),
-                        "groove_timing": groove_timing(seq.tracks[me_id],
-                                                       seq.tracks[ref_id], seq.fps)}
+                pair = {"picture_catching": picture_catching(me_t, ref_t, seq.fps),
+                        "groove_timing": groove_timing(me_t, ref_t, seq.fps)}
                 report = build_report(name, me, ref, sync, [plot], team=team, feedback=fb,
                                       meta=config.load_meta(name), moments=mom, pair=pair)
             st.success("Done! Also saved under the Past reports tab.")

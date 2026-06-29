@@ -10,8 +10,9 @@ from . import config
 
 # Flat numeric metrics logged + compared (top-level + rom_region.*).
 SCALARS = [
-    "sharpness", "fluidity", "dynamic_range", "groove_strength", "groove_beat_lock",
-    "articulation", "engagement", "hip_articulation", "core_share",
+    "sharpness", "explosiveness", "fluidity", "dynamic_range",
+    "groove_strength", "groove_beat_lock", "articulation", "engagement",
+    "hip_articulation", "core_share",
     "pocket_ms", "pocket_std_ms", "timing_bias_ms", "timing_std_ms",
 ]
 ROM_REGIONS = ["head", "shoulders", "chest", "hips", "arms", "legs"]

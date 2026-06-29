@@ -77,6 +77,9 @@ def _compare_table(me: dict, ref: dict) -> list[str]:
     rows = [
         ("sharpness (tick)", f"{me['sharpness']:.1f}", f"{ref['sharpness']:.1f}",
          _verdict(me["sharpness"], ref["sharpness"])),
+        ("explosiveness (launch)", f"{me.get('explosiveness', 0):.2f}",
+         f"{ref.get('explosiveness', 0):.2f}",
+         _verdict(me.get("explosiveness", 0), ref.get("explosiveness", 0))),
         ("fluidity (gooey)", f"{me['fluidity']:.2f}", f"{ref['fluidity']:.2f}",
          _verdict(me["fluidity"], ref["fluidity"])),
         ("dynamic range", f"{me['dynamic_range']:.2f}", f"{ref['dynamic_range']:.2f}",
@@ -120,6 +123,7 @@ def _compare_table(me: dict, ref: dict) -> list[str]:
 # key metrics for strengths/weaknesses + the side-by-side (label, accessor, higher=better)
 _KEY_METRICS = [
     ("sharpness (tick)", lambda m: m["sharpness"]),
+    ("explosiveness (launch)", lambda m: m.get("explosiveness", 0)),
     ("fluidity (gooey)", lambda m: m["fluidity"]),
     ("dynamic range", lambda m: m["dynamic_range"]),
     ("groove (locked bounce)", lambda m: m["groove_strength"] * m["groove_beat_lock"]),
@@ -262,10 +266,10 @@ def build_report(name: str, me: dict, ref: dict, sync: dict,
 
     pc = pair.get("picture_catching")
     if pc:
-        lines.append("\n## Picture-catching (do you hit & hold her shapes?)\n")
-        lines.append(f"- During the reference's holds (her pictures), **you move "
-                     f"{pc['ratio']:.1f}× faster than her** — lower is better (1× = you "
-                     "freeze exactly when she does).")
+        lines.append("\n## Picture-catching (do you hit & hold the reference's shapes?)\n")
+        lines.append(f"- During the reference's holds (the pictures), **you move "
+                     f"{pc['ratio']:.1f}× faster than the reference** — lower is better "
+                     "(1× = you freeze exactly when the reference does).")
         lines.append(f"- **Stillpoint match: {pc['corr']:.2f}** (1 = you catch every "
                      "picture, 0 = no relationship). This is the strongest signal of "
                      "*committing to the shapes* vs. dancing through them.")
@@ -273,18 +277,18 @@ def build_report(name: str, me: dict, ref: dict, sync: dict,
     gt = pair.get("groove_timing")
     if gt and gt["corr"] >= 0.4:
         lag = gt["lag_ms"]
-        when = ("late — behind her" if lag > 15 else
-                "early — ahead of her" if lag < -15 else "right with her")
+        when = ("late — behind the reference" if lag > 15 else
+                "early — ahead of the reference" if lag < -15 else "right with the reference")
         lines.append("\n## Groove timing (early or late)\n")
         lines.append(f"- Your bounce is **~{abs(lag):.0f} ms {when}** (match strength "
                      f"{gt['corr']:.2f}; reference-anchored, so reliable).")
         if lag > 15:
-            lines.append("- Drive the down a touch sooner to sit with her.")
+            lines.append("- Drive the down a touch sooner to sit with the reference.")
         elif lag < -15:
             lines.append("- Wait/sit back a touch — you're rushing the down.")
     elif gt:
-        lines.append("\n## Groove timing\n- Your bounce doesn't track hers closely enough "
-                     f"to time reliably (match {gt['corr']:.2f}).")
+        lines.append("\n## Groove timing\n- Your bounce doesn't track the reference's "
+                     f"closely enough to time reliably (match {gt['corr']:.2f}).")
 
     if moments:
         lines.append("\n## Moments to study (timestamps in this clip)\n")

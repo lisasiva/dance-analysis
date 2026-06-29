@@ -169,6 +169,32 @@ def sharpness(times: np.ndarray, speed: np.ndarray) -> float:
     return float(np.percentile(accel, 95) / (np.mean(speed) + 1e-9))
 
 
+def explosiveness(times: np.ndarray, speed: np.ndarray) -> float:
+    """How fast you launch from still into movement (rate of speed rise out of a
+    near-still start to the launch peak). Higher = snappier / more explosive.
+
+    Coarse on low-fps video (a launch can take 1-2 frames), so read small
+    differences with caution; high-fps clips resolve it far better.
+    """
+    if speed.size < 6:
+        return 0.0
+    lo, hi = np.percentile(speed, 30), np.percentile(speed, 70)
+    accels, i, n = [], 1, len(speed)
+    while i < n:
+        if speed[i - 1] <= lo < speed[i]:        # rising out of near-stillness
+            start, j = i - 1, i
+            while j + 1 < n and speed[j + 1] >= speed[j]:
+                j += 1
+            if speed[j] >= hi:                   # a real launch (reaches full motion)
+                dt = (times[j] - times[start])
+                if dt > 0:
+                    accels.append((speed[j] - speed[start]) / dt)
+            i = j + 1
+        else:
+            i += 1
+    return float(np.median(accels)) if accels else 0.0
+
+
 def movement_events(times: np.ndarray, speed: np.ndarray) -> np.ndarray:
     """Times of accent onsets = prominent local maxima in motion energy."""
     if speed.size < 3:
@@ -355,7 +381,7 @@ def picture_catching(me: Track, ref: Track, fps: float) -> dict | None:
 
     The reference's stillpoints (low-velocity frames) are the 'pictures' the
     choreography calls for. We check how still YOU are at those same frames.
-    Moving fast during her holds = you're blowing through the pictures.
+    Moving fast during the reference's holds = you're blowing through the pictures.
     """
     tm, sm = speed_series(me, fps)
     tr, sr = speed_series(ref, fps)
@@ -374,7 +400,7 @@ def picture_catching(me: Track, ref: Track, fps: float) -> dict | None:
     ref_hold = float(rsp[hold].mean())
     you_hold = float(msp[hold].mean())
     return {
-        "ratio": you_hold / (ref_hold + 1e-9),      # you move Nx faster during her holds
+        "ratio": you_hold / (ref_hold + 1e-9),      # you move Nx faster during ref's holds
         "corr": float(np.corrcoef(msp, rsp)[0, 1]),  # stillpoint match (1=perfect, 0=none)
         "n_holds": int(hold.sum()),
     }
@@ -385,7 +411,7 @@ def groove_timing(me: Track, ref: Track, fps: float) -> dict | None:
 
     Cross-correlates the two vertical hip-bounce signals and reports the lag.
     Reference-anchored (same clip), so it cancels the beat-detector's offset and
-    is the reliable way to say 'you hit the down a hair before/after her'.
+    is the reliable way to say 'you hit the down a hair before/after the reference'.
     Negative = you lead (early); positive = you trail (late).
     """
     def vbounce(track):
@@ -606,6 +632,7 @@ def profile_track(track: Track, fps: float, grid: BeatGrid) -> dict:
         "seconds": float(len(track.frames) / fps),
         "dynamic_range": dynamic_range(s),
         "sharpness": sharpness(t, s),
+        "explosiveness": explosiveness(t, s),
         "fluidity": fluidity_index(s),
         "groove_strength": grv["strength"],
         "groove_beat_lock": grv["beat_lock"],
