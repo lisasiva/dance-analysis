@@ -14,7 +14,7 @@ from dance_analysis import config, store
 from dance_analysis.align import window_track
 from dance_analysis.audio import BeatGrid, extract_beats
 from dance_analysis.ingest import ingest
-from dance_analysis.metrics import (groove_timing, moments, picture_catching,
+from dance_analysis.metrics import (groove_timing, picture_catching,
                                     profile_track, sync_between)
 from dance_analysis.pose import PoseSequence, extract_pose
 from dance_analysis.report import build_report
@@ -26,23 +26,31 @@ st.caption("Compare your performance to another dancer who's killing it, and spo
            "to focus next.")
 
 DEFINITIONS = {
-    "sharpness (tick)": "How crisply you hit and freeze — explosive attack, dead stops. "
-                        "Higher = sharper.",
-    "fluidity (gooey)": "Sustained, continuous movement vs. hit-and-freeze. Typical speed ÷ "
-                        "peak speed; higher = smoother flow.",
+    "picture-catching": "Do you hit and HOLD the shapes the reference holds? At their "
+                        "stillpoints (the 'pictures'), how still are you. Committing to the "
+                        "shapes vs. dancing through them — the strongest quality signal.",
     "pocket": "When you INITIATE a move relative to the beat. After the beat = patient / in "
               "the pocket; before = anticipating / rushing. Rough (±~33 ms).",
     "timing": "Where your accents land vs. the reference, and how consistent (lower spread = "
               "tighter).",
-    "groove (beat-lock)": "Your bounce / weight-shift, and whether it rides the beat. "
-                          "Strength = how much you bounce; beat-lock = how on-tempo it is.",
-    "dynamic range": "Contrast between your biggest moves and your stillest moments. Higher = "
-                     "more dynamic; flatness reads as 'not ready'.",
-    "articulation": "Share of your motion carried by head + chest (vs. only limbs).",
+    "sharpness (tick)": "How crisply you hit and freeze — explosive attack, dead stops.",
+    "explosiveness (launch)": "How fast you launch from still into movement (rate of speed "
+                              "rise out of stillness). Coarse on low-fps video.",
+    "fluidity (gooey)": "Sustained, continuous movement vs. hit-and-freeze. Higher = smoother "
+                        "flow.",
+    "dynamic range": "Contrast between your biggest moves and your stillest moments.",
+    "groove (bounce)": "Vertical bounce: strength = how much you bounce; beat-lock = how much "
+                       "of that bounce sits on the tempo.",
+    "groove timing": "Is your bounce early or late vs. the reference (you hit the down a hair "
+                     "before/after them).",
     "body engagement": "How many body segments (head/chest/hips/arms/legs) move at the SAME "
-                       "time in a move, 0–5. Measures 'filling up' a move.",
-    "range of motion (ROM)": "How far each body region travels, in degrees — your line & "
-                             "extension, per part. Turn/spin frames are excluded.",
+                       "time in a move, 0–5.",
+    "core share": "Fraction of your motion coming from the core (head/chest/hips) vs. the "
+                  "limbs (arms/legs). Low = limb-dominant / 'marking with feet'.",
+    "hip articulation": "Lateral hip sway / twerk — hip motion the pelvis-centering otherwise "
+                        "hides. Shown for context; more isn't necessarily better.",
+    "range of motion (ROM)": "How far each body region travels, in degrees — line & extension, "
+                             "per part. Turn/spin frames are excluded.",
     "sync": "How closely you match the reference's exact shape. Low priority — your own style "
             "is fine/preferred.",
 }
@@ -153,11 +161,14 @@ with tab_analyze:
         c1, c2 = st.columns(2)
         me_sel = c1.selectbox("Which track is YOU?", opts, index=0)
         ref_sel = c2.selectbox("Which is the REFERENCE?", opts, index=min(1, len(opts) - 1))
+        clip_meta = config.load_meta(state["name"])
         t1, t2 = st.columns(2)
         start_s = t1.text_input("Dance starts at (seconds, optional)",
+                                value=clip_meta.get("dance_start", ""),
                                 help="Skip the intro freestyle/shuffle so it doesn't "
                                      "count. Leave blank to use the whole clip.")
         end_s = t2.text_input("Dance ends at (seconds, optional)",
+                              value=clip_meta.get("dance_end", ""),
                               help="Skip the outro. Leave blank for the whole clip.")
 
         if st.button("Compare"):
@@ -169,6 +180,7 @@ with tab_analyze:
             seq = PoseSequence.load(config.pose_path(name))
             grid = BeatGrid.load(config.beats_path(name))
             team = None if state["team"] == "(generic)" else state["team"]
+            config.save_meta(name, dance_start=start_s.strip(), dance_end=end_s.strip())
             start = float(start_s) if start_s.strip() else None
             end = float(end_s) if end_s.strip() else None
             me_t, ref_t = seq.tracks[me_id], seq.tracks[ref_id]
@@ -182,7 +194,6 @@ with tab_analyze:
                 out = config.report_dir(name)
                 plot = plot_comparison(me_t, ref_t, seq.fps, grid,
                                        out / "motion_energy.png")
-                mom = moments(me_t, ref_t, seq.fps)
                 fb = [ln.strip() for ln in state.get("feedback", "").splitlines()
                       if ln.strip()]
                 gfp = config.general_feedback_path()
@@ -191,7 +202,8 @@ with tab_analyze:
                 pair = {"picture_catching": picture_catching(me_t, ref_t, seq.fps),
                         "groove_timing": groove_timing(me_t, ref_t, seq.fps)}
                 report = build_report(name, me, ref, sync, [plot], team=team, feedback=fb,
-                                      meta=config.load_meta(name), moments=mom, pair=pair)
+                                      meta=config.load_meta(name), pair=pair,
+                                      me_track=me_t, ref_track=ref_t, fps=seq.fps, grid=grid)
             st.success("Done! Also saved under the Past reports tab.")
             st.image(str(out / "motion_energy.png"))
             st.markdown(Path(report).read_text())

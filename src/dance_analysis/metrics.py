@@ -544,68 +544,168 @@ def stance_spread(track: Track) -> np.ndarray:
     return np.abs(kps[:, ra, 0] - kps[:, la, 0]) / torso_length(kps)
 
 
-def moments(me: Track, ref: Track | None, fps: float) -> dict:
-    """Specific timestamps to go watch, illustrating each gap. `ref` may be None
-    (e.g. comparing against a team profile) — reference-relative moments are skipped."""
-    out: dict[str, object] = {}
-
-    # leg extension: where the reference's stance most exceeds yours
-    cf = np.intersect1d(me.frames, ref.frames) if ref is not None else np.array([])
-    if cf.size:
-        mi = {f: i for i, f in enumerate(me.frames)}
-        ri = {f: i for i, f in enumerate(ref.frames)}
-        ms, rs = stance_spread(me), stance_spread(ref)
-        best, bf = -np.inf, None
-        for f in cf:
-            a, b = rs[ri[f]], ms[mi[f]]
-            if np.isfinite(a) and np.isfinite(b) and a - b > best:
-                best, bf = a - b, f
-        if bf is not None:
-            out["leg_extension"] = _mmss(bf / fps)
-
-    # fluidity gaps: reference is flowing while you've frozen
+def _aligned_speed(me: Track, ref: Track, fps: float):
+    """Frame-aligned (times, your_speed, ref_speed) over the shared frames."""
     tm, sm = speed_series(me, fps)
-    tr, sr = speed_series(ref, fps) if ref is not None else (np.array([]), np.array([]))
-    if tm.size and tr.size:
-        t0, t1 = max(tm.min(), tr.min()), min(tm.max(), tr.max())
-        if t1 > t0:
-            g = np.linspace(t0, t1, int((t1 - t0) * fps))
-            gm, gr = np.interp(g, tm, sm), np.interp(g, tr, sr)
-            gap = (gr > np.percentile(gr, 60)) & (gm < np.percentile(gm, 30))
-            # collapse contiguous runs, keep the longest few
-            runs, i = [], 0
-            while i < len(gap):
-                if gap[i]:
-                    j = i
-                    while j < len(gap) and gap[j]:
-                        j += 1
-                    runs.append((j - i, g[i]))
-                    i = j
-                else:
-                    i += 1
-            runs.sort(reverse=True)               # longest gaps first
-            top = sorted(runs[:3], key=lambda r: r[1])   # then chronological
-            out["fluidity_gaps"] = [_mmss(s) for _, s in top]
+    tr, sr = speed_series(ref, fps)
+    if tm.size < 4 or tr.size < 4:
+        return None
+    fmap = {int(round(t * fps)): s for t, s in zip(tr, sr)}
+    times, msp, rsp = [], [], []
+    for t, s in zip(tm, sm):
+        f = int(round(t * fps))
+        if f in fmap:
+            times.append(t)
+            msp.append(s)
+            rsp.append(fmap[f])
+    if len(times) < 10:
+        return None
+    return np.array(times), np.array(msp), np.array(rsp)
 
-    # groove: longest steady moderate-motion stretch (where to feel weight shifts)
-    if tm.size > int(4 * fps):
-        win = int(4 * fps)
-        best = None
-        for st in range(0, len(sm) - win, int(fps)):
-            seg = sm[st:st + win]
-            if np.mean(seg) > np.median(sm):
-                score = np.median(seg) / (np.percentile(seg, 95) + 1e-9)
-                if best is None or score > best[0]:
-                    best = (score, tm[st], tm[st + win])
-        if best:
-            out["groove_section"] = f"{_mmss(best[1])}-{_mmss(best[2])}"
 
-    # your sharpest hit (a strength to reference)
-    ev = movement_events(tm, sm)
-    if ev.size:
-        idx = [int(np.argmin(np.abs(tm - e))) for e in ev]
-        out["your_sharp_hit"] = _mmss(ev[int(np.argmax([sm[i] for i in idx]))])
+# Each finder returns (timestamp_str, what-to-watch) for the worst instance of
+# that dimension's gap, or None.
+def _fm_picture(me, ref, fps, grid):
+    al = _aligned_speed(me, ref, fps)
+    if al is None:
+        return None
+    t, m, r = al
+    hold = r <= np.percentile(r, 20)
+    if hold.sum() < 3:
+        return None
+    i = np.where(hold)[0][int(np.argmax(m[hold]))]
+    return _mmss(t[i]), "the reference holds a shape here while you keep moving — catch and freeze in it"
 
+
+def _fm_dynamics(me, ref, fps, grid):
+    al = _aligned_speed(me, ref, fps)
+    if al is None:
+        return None
+    t, m, r = al
+    return _mmss(t[int(np.argmax(r - m))]), "the reference goes big here while you stay small — match the size"
+
+
+def _fm_sharpness(me, ref, fps, grid):
+    al = _aligned_speed(me, ref, fps)
+    if al is None:
+        return None
+    t, m, r = al
+    drop = -np.diff(r) + np.diff(m)        # reference stops hard, you don't
+    return _mmss(t[int(np.argmax(drop))]), "the reference snaps to a freeze here and you don't — sharpen the stop"
+
+
+def _fm_timing(me, ref, fps, grid):
+    t, s = speed_series(me, fps)
+    ev = movement_events(t, s)
+    if ev.size == 0:
+        return None
+    to = timing_offsets(ev, grid)
+    offs = to["offsets"]
+    if offs.size == 0:
+        return None
+    i = int(np.argmax(np.abs(offs)))
+    return _mmss(ev[i]), f"your accent here is {'behind' if offs[i] > 0 else 'ahead of'} the beat — line it up"
+
+
+def _fm_fluidity(me, ref, fps, grid):
+    al = _aligned_speed(me, ref, fps)
+    if al is None:
+        return None
+    t, m, r = al
+    gap = (r > np.percentile(r, 60)) & (m < np.percentile(m, 30))
+    if not gap.any():
+        return None
+    runs, i = [], 0
+    while i < len(gap):
+        if gap[i]:
+            j = i
+            while j < len(gap) and gap[j]:
+                j += 1
+            runs.append((j - i, t[i]))
+            i = j
+        else:
+            i += 1
+    runs.sort(reverse=True)
+    return _mmss(runs[0][1]), "the reference keeps flowing while you've frozen — sustain through here"
+
+
+def _fm_groove(me, ref, fps, grid):
+    t, s = speed_series(me, fps)
+    if t.size <= int(4 * fps):
+        return None
+    win, best = int(4 * fps), None
+    for st in range(0, len(s) - win, int(fps)):
+        seg = s[st:st + win]
+        if np.mean(seg) > np.median(s):
+            score = np.median(seg) / (np.percentile(seg, 95) + 1e-9)
+            if best is None or score > best[0]:
+                best = (score, t[st], t[st + win])
+    if best is None:
+        return None
+    return f"{_mmss(best[1])}-{_mmss(best[2])}", "steady groove stretch — drill the weight-shift/bounce to the count"
+
+
+def _fm_rom(me, ref, fps, grid):
+    cf = np.intersect1d(me.frames, ref.frames)
+    if not cf.size:
+        return None
+    mi = {f: i for i, f in enumerate(me.frames)}
+    ri = {f: i for i, f in enumerate(ref.frames)}
+    ms, rs = stance_spread(me), stance_spread(ref)
+    best, bf = -np.inf, None
+    for f in cf:
+        a, b = rs[ri[f]], ms[mi[f]]
+        if np.isfinite(a) and np.isfinite(b) and a - b > best:
+            best, bf = a - b, f
+    if bf is None:
+        return None
+    return _mmss(bf / fps), "the reference reaches a much bigger stance/extension here — get fuller"
+
+
+def _fm_engagement(me, ref, fps, grid):
+    def core_speed(track):
+        kps = track.kps[:, :, :2].astype(float)
+        cen = np.nanmean(kps, axis=1, keepdims=True)
+        tl = torso_length(track.kps.astype(float))[:, None, None]
+        d = np.linalg.norm(np.diff((kps - cen) / tl, axis=0), axis=2)
+        idx = [config.KP[j] for seg in ("head", "chest", "hips")
+               for j in config.SEGMENTS[seg]]
+        return track.frames[:-1], np.nan_to_num(np.nanmean(d[:, idx], axis=1))
+    tm, cm = core_speed(me)
+    tr, cr = core_speed(ref)
+    fmap = {int(f): c for f, c in zip(tr, cr)}
+    best, bf = -np.inf, None
+    for f, c in zip(tm, cm):
+        if int(f) in fmap and fmap[int(f)] - c > best:
+            best, bf = fmap[int(f)] - c, f
+    if bf is None:
+        return None
+    return _mmss(bf / fps), "the reference drives this with head/chest/hips while you use limbs — engage your core"
+
+
+_MOMENT_FINDERS = {
+    "picture": _fm_picture, "timing": _fm_timing, "sharpness": _fm_sharpness,
+    "dynamics": _fm_dynamics, "fluidity": _fm_fluidity, "groove": _fm_groove,
+    "rom": _fm_rom, "engagement": _fm_engagement,
+}
+
+
+def focus_moments(me: Track, ref: Track | None, fps: float, grid, ranked, top=5):
+    """A timestamp per top-ranked focus dimension, where that gap is worst — so the
+    moments to watch line up with the 'where to focus' ranking."""
+    if ref is None:
+        return []
+    out = []
+    for dim in ranked[:top]:
+        finder = _MOMENT_FINDERS.get(dim)
+        if not finder:
+            continue
+        try:
+            r = finder(me, ref, fps, grid)
+        except Exception:  # noqa: BLE001 — a finder failing shouldn't sink the report
+            r = None
+        if r:
+            out.append({"dim": dim, "ts": r[0], "what": r[1]})
     return out
 
 

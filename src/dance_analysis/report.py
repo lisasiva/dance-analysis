@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from . import config, store
+from .metrics import focus_moments
 
 
 def _gap_scores(me: dict, ref: dict, sync: dict, team: str | None) -> dict:
@@ -198,10 +199,10 @@ def _journal_entry(name: str, meta: dict, team: str | None, me: dict, ref: dict,
 def build_report(name: str, me: dict, ref: dict, sync: dict,
                  plots: list[Path], team: str | None = None,
                  feedback: list[str] | None = None,
-                 meta: dict | None = None, moments: dict | None = None,
-                 pair: dict | None = None) -> Path:
+                 meta: dict | None = None, pair: dict | None = None,
+                 me_track=None, ref_track=None, fps: float | None = None,
+                 grid=None) -> Path:
     meta = meta or {}
-    moments = moments or {}
     pair = pair or {}
     strengths, weaknesses = _classify(me, ref)
     gaps = _gap_scores(me, ref, sync, team)
@@ -214,6 +215,9 @@ def build_report(name: str, me: dict, ref: dict, sync: dict,
     # over your own style, so it's shown as a number but never drives the ranking.
     weighted["sync"] = 0.0
     ranked = sorted(weighted, key=weighted.get, reverse=True)
+    # moments to study, one per top focus dimension (so they match the ranking)
+    moments = (focus_moments(me_track, ref_track, fps, grid, ranked)
+               if me_track is not None and ref_track is not None else [])
 
     out_dir = config.report_dir(name)
     # raw metrics
@@ -240,6 +244,10 @@ def build_report(name: str, me: dict, ref: dict, sync: dict,
     lines.append(f"- **You:** {meta.get('me_desc') or '—'}")
     lines.append(f"- **Reference:** {meta.get('ref_desc') or '—'}"
                  + (f"  ·  team: {team}" if team else ""))
+    ds, de = meta.get("dance_start"), meta.get("dance_end")
+    if ds or de:
+        lines.append(f"- **Analyzed window:** {ds or 'start'}s – {de or 'end'}s "
+                     "(intro/outro trimmed)")
     lines.append(f"\n- **Strengths:** {'; '.join(strengths) if strengths else '—'}")
     lines.append(f"- **Weaknesses:** {'; '.join(weaknesses) if weaknesses else '—'}")
     lines.append("## Where to focus (ranked)\n")
@@ -291,20 +299,9 @@ def build_report(name: str, me: dict, ref: dict, sync: dict,
                      f"closely enough to time reliably (match {gt['corr']:.2f}).")
 
     if moments:
-        lines.append("\n## Moments to study (timestamps in this clip)\n")
-        if moments.get("leg_extension"):
-            lines.append(f"- **Leg extension** @ {moments['leg_extension']} — the reference "
-                         "hits a much bigger stance than you here; compare your version.")
-        if moments.get("fluidity_gaps"):
-            ts = ", ".join(moments["fluidity_gaps"])
-            lines.append(f"- **Fluidity gaps** @ {ts} — the reference keeps flowing while "
-                         "you've frozen; add sustained motion through these.")
-        if moments.get("groove_section"):
-            lines.append(f"- **Groove section** @ {moments['groove_section']} — steady-motion "
-                         "stretch; drill the weight shifts to a count here.")
-        if moments.get("your_sharp_hit"):
-            lines.append(f"- **Your sharpest hit** @ {moments['your_sharp_hit']} — a strength; "
-                         "this is your crispness at its best.")
+        lines.append("\n## Moments to study (one per focus area above)\n")
+        for mo in moments:
+            lines.append(f"- **{mo['dim']}** @ {mo['ts']} — {mo['what']}.")
 
     # pocket: when movement initiates relative to the beat (rough, absolute-ish)
     def _pk(v):
