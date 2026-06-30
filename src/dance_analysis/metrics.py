@@ -240,6 +240,27 @@ def fluidity_index(speed: np.ndarray) -> float:
     return float(np.median(speed) / (peak + 1e-9))
 
 
+def texture_variety(speed: np.ndarray, fps: float, win_s: float = 1.0) -> float:
+    """How much of the sharp↔gooey palette you traverse — 'light and shade'.
+
+    Per ~1s window we measure local goo-ness (median/peak speed); the spread of
+    that across the clip is the variety. One-note (all tick OR all goo) -> ~0;
+    a dancer who alternates textures -> high. Measures range, not amount.
+    """
+    w = int(win_s * fps)
+    if speed.size < 2 * w or w < 2:
+        return 0.0
+    locs = []
+    for st in range(0, speed.size - w, max(1, w // 2)):
+        seg = speed[st:st + w]
+        if seg.size >= 4:
+            locs.append(np.median(seg) / (np.percentile(seg, 95) + 1e-9))
+    if len(locs) < 3:
+        return 0.0
+    locs = np.array(locs)
+    return float(np.percentile(locs, 90) - np.percentile(locs, 10))
+
+
 def segment_energy(track: Track, fps: float) -> dict:
     """Share of total motion carried by each body segment.
 
@@ -714,6 +735,7 @@ def profile_track(track: Track, fps: float, grid: BeatGrid) -> dict:
         "sharpness": sharpness(t, s),
         "explosiveness": explosiveness(t, s),
         "fluidity": fluidity_index(s),
+        "texture_variety": texture_variety(s, fps),
         "groove_strength": grv["strength"],
         "groove_beat_lock": grv["beat_lock"],
         "articulation": seg["articulation"],

@@ -38,6 +38,9 @@ DEFINITIONS = {
                               "rise out of stillness). Coarse on low-fps video.",
     "fluidity (gooey)": "Sustained, continuous movement vs. hit-and-freeze. Higher = smoother "
                         "flow.",
+    "texture variety": "How much of the sharp↔gooey palette you use across the piece "
+                       "('light and shade'). Measures range, not amount — one-note (all "
+                       "tick or all goo) scores low.",
     "dynamic range": "Contrast between your biggest moves and your stillest moments.",
     "groove (bounce)": "Vertical bounce: strength = how much you bounce; beat-lock = how much "
                        "of that bounce sits on the tempo.",

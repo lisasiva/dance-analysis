@@ -10,7 +10,7 @@ from . import config
 
 # Flat numeric metrics logged + compared (top-level + rom_region.*).
 SCALARS = [
-    "sharpness", "explosiveness", "fluidity", "dynamic_range",
+    "sharpness", "explosiveness", "fluidity", "texture_variety", "dynamic_range",
     "groove_strength", "groove_beat_lock", "articulation", "engagement",
     "core_share",
     "pocket_ms", "pocket_std_ms", "timing_bias_ms", "timing_std_ms",
