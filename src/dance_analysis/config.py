@@ -117,8 +117,8 @@ SEGMENTS = {
 # ---- metric weights ---------------------------------------------------------
 # The dimensions the report ranks. Each clip gets a 0-1 gap per dimension,
 # weighted by the target team's profile below.
-DIMENSIONS = ["timing", "sharpness", "fluidity", "dynamics",
-              "groove", "engagement", "picture", "sync", "rom"]
+DIMENSIONS = ["timing", "sharpness", "fluidity", "dynamics", "groove",
+              "engagement", "picture", "texture", "sync", "rom"]
 
 # Generic default (used when no --team is given).
 # `picture` (catching & holding the reference's shapes) is weighted heavily — it's
@@ -126,21 +126,24 @@ DIMENSIONS = ["timing", "sharpness", "fluidity", "dynamics",
 # shape rewards conformity); `rom` is modest (big line/extension isn't a primary street
 # win condition).
 METRIC_WEIGHTS = {
-    "timing": 0.15, "sharpness": 0.15, "fluidity": 0.10, "dynamics": 0.10,
-    "groove": 0.15, "engagement": 0.08, "picture": 0.18, "sync": 0.02, "rom": 0.07,
+    "timing": 0.14, "sharpness": 0.13, "fluidity": 0.10, "dynamics": 0.08,
+    "groove": 0.14, "engagement": 0.08, "picture": 0.17, "texture": 0.10,
+    "sync": 0.02, "rom": 0.04,
 }
 
 # Per-team style emphasis, derived from director feedback. Tunable.
 TEAM_WEIGHTS = {
     # Project A: tick-tick-tick, sharp/explosive/clean, deep pocket, strong grooves.
     "project-a": {
-        "timing": 0.18, "sharpness": 0.18, "fluidity": 0.03, "dynamics": 0.08,
-        "groove": 0.20, "engagement": 0.04, "picture": 0.18, "sync": 0.03, "rom": 0.08,
+        "timing": 0.16, "sharpness": 0.18, "fluidity": 0.03, "dynamics": 0.06,
+        "groove": 0.20, "engagement": 0.04, "picture": 0.17, "texture": 0.08,
+        "sync": 0.03, "rom": 0.05,
     },
-    # Fine Lines: fluid/gooey, hip & chest, "filling up" movement, held lines.
+    # Fine Lines: fluid/gooey, hip & chest, "filling up" movement, held lines, contrast.
     "fine-lines": {
-        "timing": 0.08, "sharpness": 0.06, "fluidity": 0.20, "dynamics": 0.10,
-        "groove": 0.08, "engagement": 0.15, "picture": 0.18, "sync": 0.03, "rom": 0.12,
+        "timing": 0.07, "sharpness": 0.05, "fluidity": 0.18, "dynamics": 0.08,
+        "groove": 0.07, "engagement": 0.14, "picture": 0.17, "texture": 0.12,
+        "sync": 0.03, "rom": 0.09,
     },
 }
 

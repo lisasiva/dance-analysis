@@ -35,6 +35,7 @@ def _gap_scores(me: dict, ref: dict, sync: dict, team: str | None) -> dict:
 
     # engagement = body parts moving per move ("filling up" movement)
     eng_gap = min(1.0, rel(me["engagement"], ref["engagement"]))
+    tex_gap = min(1.0, rel(me.get("texture_variety", 0), ref.get("texture_variety", 0)))
 
     angle_diff = sync.get("angle_diff_deg") or 0.0
     sync_gap = min(1.0, angle_diff / 30.0)
@@ -49,7 +50,7 @@ def _gap_scores(me: dict, ref: dict, sync: dict, team: str | None) -> dict:
     return {
         "timing": timing_gap, "sharpness": sharp_gap, "fluidity": fluid_gap,
         "dynamics": dyn_gap, "groove": groove_gap, "engagement": eng_gap,
-        "sync": sync_gap, "rom": rom_gap,
+        "texture": tex_gap, "sync": sync_gap, "rom": rom_gap,
     }
 
 
@@ -259,6 +260,7 @@ def build_report(name: str, me: dict, ref: dict, sync: dict,
         "dynamics": "contrast between big moves and stillness",
         "groove": "bounce / weight-shift locked to the beat",
         "engagement": "engaging multiple body parts per move",
+        "texture": "using the full sharp↔gooey palette (light & shade)",
         "picture": "catching & holding the shapes the reference holds",
         "sync": "matching the reference's shape (low priority — style is yours)",
         "rom": "range of motion / line & extension",

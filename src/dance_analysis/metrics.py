@@ -684,10 +684,34 @@ def _fm_engagement(me, ref, fps, grid):
     return _mmss(bf / fps), "the reference drives this with head/chest/hips while you use limbs — engage your core"
 
 
+def _fm_texture(me, ref, fps, grid):
+    al = _aligned_speed(me, ref, fps)
+    if al is None:
+        return None
+    t, m, r = al
+    w = int(1.0 * fps)
+    if len(t) < 2 * w:
+        return None
+    best = (-1.0, None, "")
+    for st in range(0, len(t) - w, max(1, w // 2)):
+        ms, rs = m[st:st + w], r[st:st + w]
+        if ms.size < 4:
+            continue
+        mg = np.median(ms) / (np.percentile(ms, 95) + 1e-9)   # your local goo-ness
+        rg = np.median(rs) / (np.percentile(rs, 95) + 1e-9)   # reference's
+        d = abs(rg - mg)
+        if d > best[0]:
+            best = (d, t[st], "gooey/sustained" if rg > mg else "sharp/staccato")
+    if best[1] is None:
+        return None
+    return _mmss(best[1]), (f"the reference commits to a {best[2]} texture here while you stay "
+                            "flatter — push the contrast")
+
+
 _MOMENT_FINDERS = {
     "picture": _fm_picture, "timing": _fm_timing, "sharpness": _fm_sharpness,
     "dynamics": _fm_dynamics, "fluidity": _fm_fluidity, "groove": _fm_groove,
-    "rom": _fm_rom, "engagement": _fm_engagement,
+    "rom": _fm_rom, "engagement": _fm_engagement, "texture": _fm_texture,
 }
 
 
