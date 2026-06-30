@@ -86,9 +86,6 @@ def _compare_table(me: dict, ref: dict) -> list[str]:
         ("dynamic range", f"{me['dynamic_range']:.2f}", f"{ref['dynamic_range']:.2f}",
          _verdict(me["dynamic_range"], ref["dynamic_range"])),
         ("groove (locked bounce)", f"{g:.3f}", f"{gr:.3f}", _verdict(g, gr, 0.25)),
-        ("hip articulation (sway/twerk)", f"{me.get('hip_articulation', 0):.3f}",
-         f"{ref.get('hip_articulation', 0):.3f}",
-         _verdict(me.get("hip_articulation", 0), ref.get("hip_articulation", 0), 0.20)),
         ("core share (vs limbs)", f"{me.get('core_share', 0):.2f}",
          f"{ref.get('core_share', 0):.2f}",
          _verdict(me.get("core_share", 0), ref.get("core_share", 0))),
@@ -128,8 +125,6 @@ _KEY_METRICS = [
     ("fluidity (gooey)", lambda m: m["fluidity"]),
     ("dynamic range", lambda m: m["dynamic_range"]),
     ("groove (locked bounce)", lambda m: m["groove_strength"] * m["groove_beat_lock"]),
-    # NOTE: hip_articulation is shown in the table but NOT classified as a
-    # strength/weakness — "more sway" isn't better (it can be sloppy weight-shift).
     ("core share (vs limbs)", lambda m: m.get("core_share", 0)),
     ("body engagement (parts/move)", lambda m: m["engagement"]),
     ("ROM head", lambda m: m.get("rom_region", {}).get("head", 0)),

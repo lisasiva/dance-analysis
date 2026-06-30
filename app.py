@@ -47,8 +47,6 @@ DEFINITIONS = {
                        "time in a move, 0–5.",
     "core share": "Fraction of your motion coming from the core (head/chest/hips) vs. the "
                   "limbs (arms/legs). Low = limb-dominant / 'marking with feet'.",
-    "hip articulation": "Lateral hip sway / twerk — hip motion the pelvis-centering otherwise "
-                        "hides. Shown for context; more isn't necessarily better.",
     "range of motion (ROM)": "How far each body region travels, in degrees — line & extension, "
                              "per part. Turn/spin frames are excluded.",
     "sync": "How closely you match the reference's exact shape. Low priority — your own style "

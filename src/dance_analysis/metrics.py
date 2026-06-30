@@ -292,26 +292,6 @@ def body_engagement(track: Track) -> float:
     return float(np.mean(active[:, moving].sum(axis=0)))
 
 
-def hip_articulation(track: Track, fps: float) -> float:
-    """Lateral hip movement relative to the torso (sway / twerk / weight-shift).
-
-    The main metrics pelvis-center every frame, which mathematically ERASES this
-    motion. Here we measure the hips moving *under a stable torso* (hip-mid minus
-    shoulder-mid, scale-normalized), on non-turn frames. Higher = more hip work.
-    """
-    kps = track.kps.astype(float)
-    if len(kps) < 5:
-        return 0.0
-    still = ~_turning_mask(kps, fps)
-    tl = torso_length(kps)
-    shm = _mid(kps, "left_shoulder", "right_shoulder")
-    hm = _mid(kps, "left_hip", "right_hip")
-    sway = (hm[:, 0] - shm[:, 0]) / tl
-    s = sway[still]
-    s = s[np.isfinite(s)]
-    return float(np.std(s)) if s.size >= 4 else 0.0
-
-
 def _centroid_segment_motion(track: Track) -> dict:
     """Per-segment motion measured relative to the WHOLE-BODY centroid (not the
     pelvis), so hip motion isn't zeroed out. Comparable units across segments."""
@@ -739,7 +719,6 @@ def profile_track(track: Track, fps: float, grid: BeatGrid) -> dict:
         "articulation": seg["articulation"],
         "segment_share": seg["share"],
         "engagement": body_engagement(track),
-        "hip_articulation": hip_articulation(track, fps),
         "core_share": dist["core_share"],
         "segment_motion": dist["share"],
         "n_accents": int(events.size),
